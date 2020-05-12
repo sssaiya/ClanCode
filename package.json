@@ -10,14 +10,14 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:ClanCode.helloWorld"
+    "onCommand:ClanCode.CodeGame"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "ClanCode.helloWorld",
-        "title": "Hello World"
+        "command": "ClanCode.CodeGame",
+        "title": "Code with your Clan"
       }
     ],
     "views": {
@@ -51,6 +51,7 @@
     "vscode-test": "^1.3.0"
   },
   "dependencies": {
+    "firebase": "^7.14.3",
     "vsls": "^1.0.1830"
   }
 }
