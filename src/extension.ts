@@ -24,10 +24,20 @@ class userData {
     this.clanName = null;
   }
 }
+interface UserStatus {
+  username: string;
+  lastOnline: number;
+  status: string;
+}
+interface indexedArray {
+  [key: string]: UserStatus;
+}
+
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export async function activate(context: ExtensionContext) {
   let user: userData;
+  var clanStatus: indexedArray = {};
   // Use the console to output diagnostic information (console.log) and errors (console.error)
   // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "ClanCode" is now active!');
@@ -66,6 +76,16 @@ export async function activate(context: ExtensionContext) {
           ", Create or Join a clan via its Clan Tag to get started !";
       }
       window.showInformationMessage(displayString);
+
+      getClan(); // Might have to call this from somewhere else as well.
+
+      //Change sidebar menu name to clan name
+      if (user.isInClan) {
+        let treeView = window.createTreeView("clanCode", {
+          treeDataProvider: new myTreeDataProvider(),
+        });
+        treeView.title = user.clanName || undefined;
+      }
 
       // * START PERSISTENCE WITH FIRESTORE *//
       // Create a reference to this user's specific status node.
@@ -109,9 +129,44 @@ export async function activate(context: ExtensionContext) {
     }
   });
 
-  let treeView = window.createTreeView("clanCode", {
-    treeDataProvider: new myTreeDataProvider(),
-  });
+  function getClan() {
+    if (user != undefined && user.isInClan) {
+      console.log("HERE, getting clan");
+      firebase
+        .database()
+        .ref("/clans/" + user.clanTag + "/members")
+        .once("value")
+        .then(function (snapshot) {
+          snapshot.forEach(function (childSnapshot) {
+            const memberUID: string = childSnapshot.val();
+            getStatus(memberUID);
+          });
+        })
+        .catch(function (error) {
+          //TODO error handling
+        });
+    }
+  }
+
+  async function getStatus(uid: string) {
+    console.log(uid);
+    firebase
+      .database()
+      .ref("/status/" + uid) // on value makes this function listen and fire for every change on this route
+      .on("value", function (snapshot) {
+        const username = snapshot.val().user_name;
+        const userStatus: UserStatus = {
+          username: snapshot.val().user_name,
+          lastOnline: snapshot.val().last_changed,
+          status: snapshot.val().state,
+        };
+        clanStatus[username] = userStatus;
+
+        //Update array in global storage
+        context.workspaceState.update("clanMembersStatus", clanStatus);
+        //TODO Refresh tree view
+      });
+  }
 
   let alignment = 10;
 
@@ -164,7 +219,7 @@ export async function activate(context: ExtensionContext) {
       last_changed: firebase.database.ServerValue.TIMESTAMP,
       user_name: user.username,
     };
-    if (user == undefined) {
+    if (user != undefined) {
       console.log("Going Active");
       firebase
         .database()
@@ -379,7 +434,7 @@ export async function activate(context: ExtensionContext) {
       await firebase
         .database()
         .ref("clans/" + clanTag)
-        .on("value", function (snapshot) {
+        .once("value", function (snapshot) {
           if (snapshot.val() != null) {
             clanName = snapshot.val().name;
           } else {
@@ -430,6 +485,7 @@ export async function activate(context: ExtensionContext) {
           options.push("Join Clan");
         }
       }
+
       const result = await window.showQuickPick(options, {
         placeHolder: "Welcome To ClanCode",
         onDidSelectItem: (item) => {
