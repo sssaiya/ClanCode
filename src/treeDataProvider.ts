@@ -33,17 +33,22 @@ export class myTreeDataProvider implements TreeDataProvider<myItem> {
     return element;
   }
   getChildren(element?: myItem | undefined): ProviderResult<myItem[]> {
-    var items: Array<myItem> = [];
-    this.ClanStatusArray.forEach((userStatus) => {
-      const item = new myItem(
-        userStatus.username,
-        userStatus.status,
-        TreeItemCollapsibleState.Collapsed
-      );
-      items.push(item);
-    });
+    if (element == undefined) {
+      // User element
+      var items: Array<myItem> = [];
+      this.ClanStatusArray.forEach((userStatus) => {
+        const item = new myItem(
+          userStatus.username,
+          userStatus.status,
+          TreeItemCollapsibleState.Collapsed
+        );
+        items.push(item);
+      });
 
-    return Promise.resolve(items);
+      return Promise.resolve(items);
+    } else {
+      // Add actions other stuff here (Shown on click)
+    }
   }
 
   private _onDidChangeTreeData: EventEmitter<
