@@ -27,7 +27,13 @@
           "name": "Clan Code"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "clanCode",
+        "contents": "Log in and join a clan to get started!"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
