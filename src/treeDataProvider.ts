@@ -7,6 +7,7 @@ import {
   Event,
 } from "vscode";
 import { UserStatus } from "./extension";
+import path = require("path");
 
 class myItem extends TreeItem {
   constructor(
@@ -24,6 +25,11 @@ class myItem extends TreeItem {
   get description(): string {
     return this.status;
   }
+
+  public readonly iconPath = {
+    light: path.join(__filename, "..", "..", "images", "test.svg"),
+    dark: path.join(__filename, "..", "..", "images", "test.svg"),
+  };
 }
 
 export class myTreeDataProvider implements TreeDataProvider<myItem> {
