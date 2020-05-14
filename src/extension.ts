@@ -24,20 +24,18 @@ class userData {
     this.clanName = null;
   }
 }
-interface UserStatus {
+export interface UserStatus {
   username: string;
   lastOnline: number;
   status: string;
 }
-interface indexedArray {
-  [key: string]: UserStatus;
-}
+let indexedArray: Map<string, UserStatus>;
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export async function activate(context: ExtensionContext) {
   let user: userData;
-  var clanStatus: indexedArray = {};
+  indexedArray = new Map<string, UserStatus>();
   // Use the console to output diagnostic information (console.log) and errors (console.error)
   // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "ClanCode" is now active!');
@@ -48,7 +46,6 @@ export async function activate(context: ExtensionContext) {
   firebase.initializeApp(firebaseConfig);
 
   firebase.auth().onAuthStateChanged(async function (firebaseUser) {
-    console.log("IN AUTH STATE CHANGE");
     if (firebaseUser) {
       user = new userData(firebaseUser.uid);
 
@@ -82,7 +79,7 @@ export async function activate(context: ExtensionContext) {
       //Change sidebar menu name to clan name
       if (user.isInClan) {
         let treeView = window.createTreeView("clanCode", {
-          treeDataProvider: new myTreeDataProvider(),
+          treeDataProvider: new myTreeDataProvider(indexedArray),
         });
         treeView.title = user.clanName || undefined;
       }
@@ -160,10 +157,10 @@ export async function activate(context: ExtensionContext) {
           lastOnline: snapshot.val().last_changed,
           status: snapshot.val().state,
         };
-        clanStatus[username] = userStatus;
+        indexedArray.set(username, userStatus);
 
         //Update array in global storage
-        context.workspaceState.update("clanMembersStatus", clanStatus);
+        // context.workspaceState.update("clanMembersStatus", indexedArray);
         //TODO Refresh tree view
       });
   }

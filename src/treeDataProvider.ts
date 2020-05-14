@@ -4,9 +4,7 @@ import {
   TreeItem,
   TreeItemCollapsibleState,
 } from "vscode";
-
-// import { INCREMENT_COUNT_COMMAND } from "./constants";
-// import { ICountStore } from "./store";
+import { UserStatus } from "./extension";
 
 class myItem extends TreeItem {
   constructor(
@@ -27,11 +25,22 @@ class myItem extends TreeItem {
 }
 
 export class myTreeDataProvider implements TreeDataProvider<myItem> {
+  constructor(private ClanStatusArray: Map<string, UserStatus>) {}
   // onDidChangeTreeData?: Event<void | Command | null | undefined> | undefined;
   getTreeItem(element: myItem): TreeItem | Thenable<myItem> {
     return element;
   }
   getChildren(element?: myItem | undefined): ProviderResult<myItem[]> {
-    throw new Error("Method not implemented.");
+    var items: Array<myItem> = [];
+    this.ClanStatusArray.forEach((userStatus) => {
+      const item = new myItem(
+        userStatus.username,
+        userStatus.status,
+        TreeItemCollapsibleState.Collapsed
+      );
+      items.push(item);
+    });
+
+    return Promise.resolve(items);
   }
 }
