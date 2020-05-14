@@ -78,10 +78,17 @@ export async function activate(context: ExtensionContext) {
 
       //Change sidebar menu name to clan name
       if (user.isInClan) {
+        const treeDataProvider: myTreeDataProvider = new myTreeDataProvider(
+          indexedArray
+        );
         let treeView = window.createTreeView("clanCode", {
-          treeDataProvider: new myTreeDataProvider(indexedArray),
+          treeDataProvider: treeDataProvider,
         });
         treeView.title = user.clanName || undefined;
+
+        commands.registerCommand("ClanCode.refresh", () =>
+          treeDataProvider.refresh()
+        );
       }
 
       // * START PERSISTENCE WITH FIRESTORE *//
@@ -159,9 +166,8 @@ export async function activate(context: ExtensionContext) {
         };
         indexedArray.set(username, userStatus);
 
-        //Update array in global storage
-        // context.workspaceState.update("clanMembersStatus", indexedArray);
-        //TODO Refresh tree view
+        // Refresh Tree view
+        commands.executeCommand("ClanCode.refresh");
       });
   }
 

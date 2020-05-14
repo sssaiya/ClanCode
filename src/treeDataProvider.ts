@@ -3,6 +3,8 @@ import {
   TreeDataProvider,
   TreeItem,
   TreeItemCollapsibleState,
+  EventEmitter,
+  Event,
 } from "vscode";
 import { UserStatus } from "./extension";
 
@@ -26,7 +28,7 @@ class myItem extends TreeItem {
 
 export class myTreeDataProvider implements TreeDataProvider<myItem> {
   constructor(private ClanStatusArray: Map<string, UserStatus>) {}
-  // onDidChangeTreeData?: Event<void | Command | null | undefined> | undefined;
+
   getTreeItem(element: myItem): TreeItem | Thenable<myItem> {
     return element;
   }
@@ -42,5 +44,16 @@ export class myTreeDataProvider implements TreeDataProvider<myItem> {
     });
 
     return Promise.resolve(items);
+  }
+
+  private _onDidChangeTreeData: EventEmitter<
+    myItem | undefined
+  > = new EventEmitter<myItem | undefined>();
+
+  readonly onDidChangeTreeData: Event<myItem | undefined> = this
+    ._onDidChangeTreeData.event;
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
   }
 }
