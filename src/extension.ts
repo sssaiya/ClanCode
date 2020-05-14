@@ -4,7 +4,12 @@
 import { ExtensionContext, commands, window, StatusBarAlignment } from "vscode";
 import { myTreeDataProvider } from "./treeDataProvider";
 import { firebaseConfig } from "./config";
-import { INVALID_EMAIL, INCORRECT_PASSWORD, USER_NOT_FOUND } from "./constants";
+import {
+  INVALID_EMAIL,
+  INCORRECT_PASSWORD,
+  USER_NOT_FOUND,
+  MIN_PASSWORD_LENGTH,
+} from "./constants";
 import * as firebase from "firebase";
 
 class userData {
@@ -271,21 +276,41 @@ export async function activate(context: ExtensionContext) {
         placeHolder: "Eg. superstar@clancode.com",
         prompt: "Enter your email to Sign up with ClanCode",
       });
+
+      if (email == undefined) {
+        return;
+      }
       const userName = await window.showInputBox({
         placeHolder: "",
         prompt:
           "Enter your Username (This is how your clan mates will see you !)",
       });
+      if (userName == undefined) {
+        window.showInformationMessage("No username");
+        return;
+      }
       const password = await window.showInputBox({
         placeHolder: "",
         prompt: "Enter your desired password",
         password: true,
       });
+      if (password == undefined || password.length < MIN_PASSWORD_LENGTH) {
+        window.showInformationMessage(
+          "Please enter a password thats atleast 8 characters"
+        );
+        return;
+      }
       const password2 = await window.showInputBox({
         placeHolder: "",
         prompt: "Re-Enter your password",
         password: true,
       });
+      if (password2 == undefined) {
+        window.showInformationMessage(
+          "Password Didn't Match! Please try again"
+        );
+        return;
+      }
 
       if (password != password2) {
         window.showInformationMessage(
@@ -318,7 +343,6 @@ export async function activate(context: ExtensionContext) {
           // ...
         });
 
-      // if(userCred == null);
       let currentUser = firebase.auth().currentUser;
       if (currentUser == null) return;
       user.uid = currentUser.uid;
