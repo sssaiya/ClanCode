@@ -12,6 +12,8 @@ import {
 } from "./constants";
 import * as firebase from "firebase";
 import { registerFunction } from "./register";
+import { loginFunction } from "./login";
+import { createClan, joinClan } from "./clanFunctions";
 
 export class userData {
   uid: string;
@@ -270,144 +272,19 @@ export async function activate(context: ExtensionContext) {
     }
   });
 
-  let register = commands.registerCommand("ClanCode.Register", registerFunction);
+  let register = commands.registerCommand(
+    "ClanCode.Register",
+    registerFunction
+  );
 
-  let logIn = commands.registerCommand("ClanCode.LogIn", async function () {
-    const email = await window.showInputBox({
-      placeHolder: "superstar@clancode.com",
-      prompt: "Enter your email to log into ClanCode",
-    });
-    const password = await window.showInputBox({
-      placeHolder: "",
-      prompt: "Enter your password to log into ClanCode",
-      password: true,
-    });
+  let logIn = commands.registerCommand("ClanCode.LogIn", loginFunction);
 
-    if (email == undefined || password == undefined) return;
-
-    firebase
-      .auth()
-      .signInWithEmailAndPassword(email, password)
-      .catch(function (error) {
-        console.log(error.code);
-        if (error.code == USER_NOT_FOUND) {
-          window.showInformationMessage(
-            "User - " +
-              email +
-              " not found, Please check of you mistyped it, else Register email First using command " +
-              "ClanCode: Register your account!"
-          );
-        }
-        if ((error.code = INCORRECT_PASSWORD)) {
-          window.showInformationMessage("Invalid Password ! Try again ");
-        }
-      });
-
-    // Note - Cant use Login with popup or redirect functionality from firebase auth Documentation
-    // as VSCode lacks some support for hhtp storage etc, have to use GitHub OAuth 2.0 endpoints To integrate
-    // sign in flow manually
-  });
   let createClanMenu = commands.registerCommand(
     "ClanCode.createClan",
-    async function createClan() {
-      // const checkButton = QuickInputButtons;
-      // Note, Buttons need Typescript, learn it soon
-      // const button = vscode.QuickInputButton().;
-      const clanName = await window.showInputBox({
-        placeHolder: "Eg. StarHackers",
-        prompt: "Enter Clan Name",
-      });
-
-      if (clanName == undefined) return;
-      const clanTag = GetUniqueClanTag(6);
-      window.showInformationMessage(clanTag);
-
-      //https://stackoverflow.com/questions/9543715/generating-human-readable-usable-short-but-unique-ids
-
-      //Create the clann in DB
-      var newClanDatabaseRef = firebase.database().ref("/clans/" + clanTag);
-      newClanDatabaseRef
-        .set({
-          name: clanName,
-          created: firebase.database.ServerValue.TIMESTAMP,
-        })
-        .catch(function (error) {
-          console.log("Create Clan Error -");
-          console.log(error);
-        });
-
-      //Add Creator to the Clan
-      var clanMembersDatabaseRef = firebase
-        .database()
-        .ref("/clans/" + clanTag + "/members");
-      clanMembersDatabaseRef.push(user.uid);
-
-      window.showInformationMessage(
-        "Created Clan - " + clanName + " And Clan Tag - " + clanTag
-      );
-
-      user.isInClan = true;
-      user.clanTag = clanTag;
-      user.clanName = clanName;
-
-      //Add user metaData
-      firebase
-        .database()
-        .ref("/users/" + user.uid)
-        .set(userData);
-    }
+    createClan
   );
 
-  let joinClanMenu = commands.registerCommand(
-    "ClanCode.joinClan",
-    async function joinClan() {
-      const clanTagLowerCase = await window.showInputBox({
-        placeHolder: "Eg. ******",
-        prompt: "Join a Clan via its ClanTag",
-      });
-
-      if (clanTagLowerCase == undefined) return;
-      const clanTag = clanTagLowerCase.toUpperCase(); //Configured to be case insensitive in DB :)
-
-      var clanName = null;
-      await firebase
-        .database()
-        .ref("clans/" + clanTag)
-        .once("value", function (snapshot) {
-          if (snapshot.val() != null) {
-            clanName = snapshot.val().name;
-          } else {
-            console.log("ERROR WRONG CLAN TAG");
-          }
-        });
-
-      if (clanName == null) {
-        window.showInformationMessage(
-          "Clan with Tag -" +
-            clanTag +
-            " doesn't exist, create or join via Clan Tag"
-        );
-        return;
-      }
-
-      console.log("Attempting to join clan" + clanName);
-
-      //Add to the Clan
-      var clanMembersDatabaseRef = firebase
-        .database()
-        .ref("/clans/" + clanTag + "/members");
-      clanMembersDatabaseRef.push(user.uid);
-
-      user.clanTag = clanTag;
-      user.isInClan = true;
-      user.clanName = clanName;
-
-      firebase
-        .database()
-        .ref("/users/" + user.uid)
-        .set(userData);
-    }
-  );
+  let joinClanMenu = commands.registerCommand("ClanCode.joinClan", joinClan);
 
   // Make one command opening this menu to execute the other commands :)
   let CodeGameMenu = commands.registerCommand(
@@ -478,29 +355,12 @@ export async function activate(context: ExtensionContext) {
 // this method is called when your extension is deactivated
 export function deactivate() {}
 
-//https:stackoverflow.com/questions/9543715/generating-human-readable-usable-short-but-unique-ids
-function GetUniqueClanTag(length: number) {
-  const _base62chars =
-    "123456789BCDFGHJKLMNPQRSTVWXYZabcdefghijklmnopqrstuvwxyz";
-  // Removed I as confused with 1
-  // Removed O and 0
-  // function random = Math.random()
-  // Remove Remaninig vowels(U, E, A) to prevent bad word generation
-  var tagBuilder = "";
-
-  for (var i = 0; i < length; i++) {
-    const keyIndex = Math.floor(Math.random() * 27); // Changed 33 to 27 as removed 6 characters
-    tagBuilder = tagBuilder + _base62chars.charAt(keyIndex);
-  }
-  return tagBuilder;
-}
-
-function padWithSpaces(name: string, length: number) {
-  const toPad = length - name.length;
-  var newString = name;
-  for (var i = 0; i < toPad; i++) {
-    if (i % 2 != 0) newString = newString + " ";
-    else newString = " " + newString;
-  }
-  return newString;
-}
+// function padWithSpaces(name: string, length: number) {
+//   const toPad = length - name.length;
+//   var newString = name;
+//   for (var i = 0; i < toPad; i++) {
+//     if (i % 2 != 0) newString = newString + " ";
+//     else newString = " " + newString;
+//   }
+//   return newString;
+// }
