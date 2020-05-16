@@ -13,7 +13,8 @@ class myItem extends TreeItem {
   constructor(
     public readonly label: string,
     private status: string,
-    public readonly collapsibleState: TreeItemCollapsibleState
+    public readonly collapsibleState: TreeItemCollapsibleState,
+    private score: number
   ) {
     super(label, collapsibleState);
   }
@@ -23,6 +24,7 @@ class myItem extends TreeItem {
   }
 
   get description(): string {
+    if (this.status == "online") return this.status + ", score - " + this.score;
     return this.status;
   }
 
@@ -46,7 +48,8 @@ export class myTreeDataProvider implements TreeDataProvider<myItem> {
         const item = new myItem(
           userStatus.username,
           userStatus.status,
-          TreeItemCollapsibleState.Collapsed
+          TreeItemCollapsibleState.Collapsed,
+          userStatus.score
         );
         items.push(item);
       });

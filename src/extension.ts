@@ -23,6 +23,7 @@ export class userData {
   isInClan: boolean;
   clanTag: string | null;
   clanName: string | null;
+  score: number;
 
   constructor(uid: string) {
     this.uid = uid;
@@ -31,12 +32,14 @@ export class userData {
     this.isInClan = false;
     this.clanTag = null;
     this.clanName = null;
+    this.score = 0;
   }
 }
 export interface UserStatus {
   username: string;
   lastOnline: number;
   status: string;
+  score: number;
 }
 let indexedArray: Map<string, UserStatus>;
 
@@ -67,6 +70,9 @@ export async function activate(context: ExtensionContext) {
           // userData = snapshot.val();
         });
 
+      user.score = 0;
+      workspace.onDidChangeTextDocument(handleChange);
+
       var displayString = "Hello - " + user.username;
 
       if (user.isInClan) {
@@ -96,34 +102,53 @@ export async function activate(context: ExtensionContext) {
         );
       }
 
-      workspace.onDidChangeTextDocument(handleChange);
-
-      function handleChange(event: TextDocumentChangeEvent) {
+      async function handleChange(event: TextDocumentChangeEvent) {
         const change = event.contentChanges;
-        // If length is 1 then its a key stroke, else it can be assumed they are copying in code
-        if (change.length == 1) {
-          const text: string = change[0].text;
-          console.log("Change in the text editor");
-          console.log(change[0]);
-          if (text == "") {
-            window.showInformationMessage("Backspace");
-          } else if (text == " ") {
-            window.showInformationMessage("Space");
-          } else {
-            const trimmedText = text.trim();
-            if (trimmedText.length > 0) {
-              const clipText: string = clipboardy.readSync();
-              if (clipText == text) {
-                window.showInformationMessage("Copied some code ? Boo!");
-              } else {
-                window.showInformationMessage(
-                  "[" + trimmedText.length + "]Added - " + trimmedText
-                );
-              }
+
+        // If length is 1 then its a key stroke
+        if (change.length != 1) return;
+
+        const text: string = change[0].text;
+        if (text == "") {
+          window.showInformationMessage("Backspace - " + text.length);
+          const deletedLength = change[0].rangeLength; // Get length of whatever was highlighte
+          const newVal = user.score - deletedLength;
+          user.score = newVal < 0 ? 0 : newVal;
+        } else if (text == " ") {
+          // window.showInformationMessage("Space");
+          user.score = user.score + 1;
+        } else {
+          const trimmedText = text.trim();
+          if (trimmedText.length > 0) {
+            const clipText: string = clipboardy.readSync();
+            if (clipText == text) {
+              window.showInformationMessage("Copied some code ? Boo!");
+              return;
+            } else {
+              const newVal =
+                user.score + trimmedText.length - change[0].rangeLength;
+              user.score = newVal < 0 ? 0 : newVal;
             }
           }
-        } else {
-          console.log("No Change");
+        }
+        var updatedScoreStatus = {
+          state: "online",
+          last_changed: firebase.database.ServerValue.TIMESTAMP,
+          user_name: user.username,
+          score: user.score,
+        };
+        if (user != undefined) {
+          firebase
+            .database()
+            .ref(".info/connected")
+            .on("value", function (snapshot) {
+              // If we're not currently connected, don't do anything.
+              if (snapshot.val() == false) {
+                return;
+              }
+
+              userStatusDatabaseRef.set(updatedScoreStatus);
+            });
         }
       }
 
@@ -138,11 +163,13 @@ export async function activate(context: ExtensionContext) {
         state: "offline",
         last_changed: firebase.database.ServerValue.TIMESTAMP,
         user_name: user.username,
+        score: user.score,
       };
       var isOnlineForDatabase = {
         state: "online",
         last_changed: firebase.database.ServerValue.TIMESTAMP,
         user_name: user.username,
+        score: user.score,
       };
       firebase
         .database()
@@ -199,9 +226,11 @@ export async function activate(context: ExtensionContext) {
           username: snapshot.val().user_name,
           lastOnline: snapshot.val().last_changed,
           status: snapshot.val().state,
+          score: snapshot.val().score,
         };
         indexedArray.set(username, userStatus);
 
+        user.score = snapshot.val().score;
         // Refresh Tree view
         commands.executeCommand("ClanCode.refresh");
       });
@@ -257,6 +286,7 @@ export async function activate(context: ExtensionContext) {
       state: "online",
       last_changed: firebase.database.ServerValue.TIMESTAMP,
       user_name: user.username,
+      score: user.score,
     };
     if (user != undefined) {
       console.log("Going Active");
@@ -283,6 +313,7 @@ export async function activate(context: ExtensionContext) {
       state: "away",
       last_changed: firebase.database.ServerValue.TIMESTAMP,
       user_name: user.username,
+      score: user.score,
     };
     if (user != undefined) {
       console.log("Going Away");
