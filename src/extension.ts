@@ -1,20 +1,21 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 // import * as vscode from "vscode";
-import { ExtensionContext, commands, window, StatusBarAlignment } from "vscode";
+import {
+  ExtensionContext,
+  commands,
+  window,
+  StatusBarAlignment,
+  workspace,
+  TextDocumentChangeEvent,
+} from "vscode";
 import { myTreeDataProvider } from "./treeDataProvider";
 import { firebaseConfig } from "./config";
-import {
-  INVALID_EMAIL,
-  INCORRECT_PASSWORD,
-  USER_NOT_FOUND,
-  MIN_PASSWORD_LENGTH,
-} from "./constants";
 import * as firebase from "firebase";
 import { registerFunction } from "./register";
 import { loginFunction } from "./login";
 import { createClan, joinClan } from "./clanFunctions";
-
+const clipboardy = require("clipboardy");
 export class userData {
   uid: string;
   username: string | null;
@@ -44,13 +45,8 @@ export let user: userData;
 // your extension is activated the very first time the command is executed
 export async function activate(context: ExtensionContext) {
   indexedArray = new Map<string, UserStatus>();
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "ClanCode" is now active!');
 
-  // The command has been defined in the package.json file
-  // Now provide the implementation of the command with registerCommand
-  // The commandId parameter must match the command field in package.json
   firebase.initializeApp(firebaseConfig);
 
   firebase.auth().onAuthStateChanged(async function (firebaseUser) {
@@ -93,10 +89,42 @@ export async function activate(context: ExtensionContext) {
           treeDataProvider: treeDataProvider,
         });
         treeView.title = user.clanName || undefined;
+        // treeView.message = user.clanTag || undefined;
 
         commands.registerCommand("ClanCode.refresh", () =>
           treeDataProvider.refresh()
         );
+      }
+
+      workspace.onDidChangeTextDocument(handleChange);
+
+      function handleChange(event: TextDocumentChangeEvent) {
+        const change = event.contentChanges;
+        // If length is 1 then its a key stroke, else it can be assumed they are copying in code
+        if (change.length == 1) {
+          const text: string = change[0].text;
+          console.log("Change in the text editor");
+          console.log(change[0]);
+          if (text == "") {
+            window.showInformationMessage("Backspace");
+          } else if (text == " ") {
+            window.showInformationMessage("Space");
+          } else {
+            const trimmedText = text.trim();
+            if (trimmedText.length > 0) {
+              const clipText: string = clipboardy.readSync();
+              if (clipText == text) {
+                window.showInformationMessage("Copied some code ? Boo!");
+              } else {
+                window.showInformationMessage(
+                  "[" + trimmedText.length + "]Added - " + trimmedText
+                );
+              }
+            }
+          }
+        } else {
+          console.log("No Change");
+        }
       }
 
       // * START PERSISTENCE WITH FIRESTORE *//
@@ -160,7 +188,7 @@ export async function activate(context: ExtensionContext) {
     }
   }
 
-  async function getStatus(uid: string) {
+  function getStatus(uid: string) {
     console.log(uid);
     firebase
       .database()
@@ -226,7 +254,7 @@ export async function activate(context: ExtensionContext) {
     var userStatusDatabaseRef = firebase.database().ref("/status/" + user.uid);
     // firebase.database().
     var isActiveForDatabase = {
-      state: "Active",
+      state: "online",
       last_changed: firebase.database.ServerValue.TIMESTAMP,
       user_name: user.username,
     };
