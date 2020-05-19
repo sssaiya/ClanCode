@@ -77,9 +77,8 @@ export async function activate(context: ExtensionContext) {
     const openRepo = gitModel.openRepositories[0].repository;
     if (openRepo) {
       workspace.onDidChangeTextDocument(handleChange);
-
       function handleChange(event: TextDocumentChangeEvent) {
-        getDiffScore(openRepo);
+        getDiffScoreForAllFiles(openRepo);
       }
     } else {
       window.showInformationMessage("Download Git Extension first !");
@@ -447,12 +446,14 @@ export async function activate(context: ExtensionContext) {
 //GIven a repository gets diff line count
 function getDiffScoreForAllFiles(repo: IRepository) {
   const changes = repo.workingTreeGroup;
-
-  console.log("Changes:");
-  console.log(changes);
   changes.resourceStates.map(async (element) => {
     const diff: string = await repo.diffWithHEAD(element.resourceUri.fsPath);
-    console.log(diff);
+    // Each chunk is prepended by a header inclosed within @@ symbols.
+    const reg: RegExp = new RegExp(/\@@(.*?)\@@/);
+    const matched = reg.exec(diff);
+    if (!matched) return;
+    console.log("----");
+    console.log(matched);
   });
 }
 
