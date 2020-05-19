@@ -1,8 +1,8 @@
 import { USER_NOT_FOUND, INCORRECT_PASSWORD } from "./constants";
-import { window } from "vscode";
+import { window, ExtensionContext } from "vscode";
 import * as firebase from "firebase";
 
-export async function loginFunction() {
+export async function loginFunction(context: ExtensionContext) {
   const email = await window.showInputBox({
     placeHolder: "superstar@clancode.com",
     prompt: "Enter your email to log into ClanCode",
@@ -33,6 +33,8 @@ export async function loginFunction() {
       }
     });
 
+  context.globalState.update("email", email);
+  context.globalState.update("password", password); // This is a BAD idea but this password is eh... TODO
   // Note - Cant use Login with popup or redirect functionality from firebase auth Documentation
   // as VSCode lacks some support for hhtp storage etc, have to use GitHub OAuth 2.0 endpoints To integrate
   // sign in flow manually
