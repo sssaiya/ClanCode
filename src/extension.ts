@@ -57,6 +57,7 @@ export interface UserStatus {
   score: number;
 }
 let indexedArray: Map<string, UserStatus>;
+let codeScore = 0;
 
 export let user: userData;
 // this method is called when your extension is activated
@@ -270,26 +271,31 @@ export async function activate(context: ExtensionContext) {
 
   let alignment = 10;
 
-  let barItem = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
-  let onlineIcon = window.createStatusBarItem(
-    StatusBarAlignment.Left,
-    alignment - 0.1
-  );
-  let offlineIcon = window.createStatusBarItem(
-    StatusBarAlignment.Left,
-    alignment - 0.1
-  );
-  barItem.command = "ClanCode.onClick";
-  barItem.text = "ClanCode";
-  barItem.show();
+  let barItem1 = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
+  barItem1.color = "#00AA00";
+  // barItem1.text = getThermometer();
+  // barItem1.show();
 
-  offlineIcon.command = "ClanCode.Online";
-  offlineIcon.text = "$(debug-hint)";
+  //let barItem = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
+  // let onlineIcon = window.createStatusBarItem(
+  //   StatusBarAlignment.Left,
+  //   alignment - 0.1
+  // );
+  // let offlineIcon = window.createStatusBarItem(
+  //   StatusBarAlignment.Left,
+  //   alignment - 0.1
+  // );
+  // barItem.command = "ClanCode.onClick";
+  // barItem.text = "ClanCode";
+  // barItem.show();
 
-  onlineIcon.command = "ClanCode.Offline";
-  onlineIcon.text = "$(circle-filled)";
-  // onlineIcon.text.fontcolor TODO MAKE THIS GREEN / make custom icons
-  onlineIcon.show();
+  // offlineIcon.command = "ClanCode.Online";
+  // offlineIcon.text = "$(debug-hint)";
+
+  // onlineIcon.command = "ClanCode.Offline";
+  // onlineIcon.text = "$(circle-filled)";
+  // // onlineIcon.text.fontcolor TODO MAKE THIS GREEN / make custom icons
+  // onlineIcon.show();
 
   // The command has been defined in the package.json file
   // Now provide the implementation of the command with  registerCommand
@@ -310,8 +316,8 @@ export async function activate(context: ExtensionContext) {
 
   let goOnline = commands.registerCommand("ClanCode.Online", function () {
     window.showInformationMessage("ONLINE");
-    offlineIcon.hide();
-    onlineIcon.show();
+    // offlineIcon.hide();
+    // onlineIcon.show();
     var userStatusDatabaseRef = firebase.database().ref("/status/" + user.uid);
     // firebase.database().
     var isActiveForDatabase = {
@@ -337,8 +343,8 @@ export async function activate(context: ExtensionContext) {
   });
   let goOffline = commands.registerCommand("ClanCode.Offline", function () {
     window.showInformationMessage("OFFLINE");
-    onlineIcon.hide();
-    offlineIcon.show();
+    // onlineIcon.hide();
+    // offlineIcon.show();
     var userStatusDatabaseRef = firebase.database().ref("/status/" + user.uid);
     // firebase.database().
     var isAwayForDatabase = {
@@ -428,12 +434,70 @@ export async function activate(context: ExtensionContext) {
 
   // Generates Clan tags qunique and not Case Sensitive
 
+  //GIven a repository gets diff line count
+  async function getDiffScoreForAllFiles(repo: IRepository) {
+    // let codeScore: number = 0;
+
+    codeScore = await getScore(repo);
+    barItem1.text = getThermometer(codeScore);
+    barItem1.color = getColorFromScore(codeScore);
+    barItem1.show();
+  }
+
+  async function getScore(repo: IRepository) {
+    let newScore = 0;
+    const changes = repo.workingTreeGroup;
+    for (let i = 0; i < changes.resourceStates.length; i++) {
+      const diffStr: string = await repo.diffWithHEAD(
+        changes.resourceStates[i].resourceUri.fsPath
+      );
+      // Each chunk is prepended by a header inclosed within @@ symbols.
+      const reg: RegExp = new RegExp(/@@(.*?)@@/);
+      const reg2: RegExp = new RegExp(/@@ \-(.*?),(.*?) \+(.*?),(.*?) @@/);
+      const diff = diffStr.split("\n");
+      for (let i = 0; i < diff.length; i++) {
+        const curr = diff[i];
+        const matched = reg.exec(curr);
+        if (!matched) continue;
+        // console.log(matched[0]);
+        const data = reg2.exec(matched[0]);
+        if (data == null) continue;
+        const subtractedFromLineNum: number = parseInt(data[1]);
+        const subtractedLineChanges: number = parseInt(data[2]);
+        const addedFromLineNum: number = parseInt(data[3]);
+        const addedLineChanges: number = parseInt(data[4]);
+
+        //subtracted lines are from subtractedFromLineNum + subtractedLineChanges
+        let affectedLines = [];
+        for (
+          let i = subtractedFromLineNum;
+          i < subtractedFromLineNum + subtractedLineChanges;
+          i++
+        ) {
+          affectedLines.push(i);
+        }
+        for (
+          let i = addedFromLineNum;
+          i < addedFromLineNum + addedLineChanges;
+          i++
+        ) {
+          if (!affectedLines.includes(i)) affectedLines.push(i);
+        }
+        newScore = newScore + affectedLines.length;
+      }
+      // if (codeScore != 0) window.showInformationMessage("Score - " + codeScore);
+
+      // window.showInformationMessage(matched[0]);
+    }
+    return newScore;
+  }
+
   context.subscriptions.push(
     disposable,
-    barItem,
+    // barItem,
     goOnline,
-    onlineIcon,
-    offlineIcon,
+    // onlineIcon,
+    // offlineIcon,
     goOffline,
     logIn,
     register,
@@ -443,18 +507,46 @@ export async function activate(context: ExtensionContext) {
   );
 }
 
-//GIven a repository gets diff line count
-function getDiffScoreForAllFiles(repo: IRepository) {
-  const changes = repo.workingTreeGroup;
-  changes.resourceStates.map(async (element) => {
-    const diff: string = await repo.diffWithHEAD(element.resourceUri.fsPath);
-    // Each chunk is prepended by a header inclosed within @@ symbols.
-    const reg: RegExp = new RegExp(/\@@(.*?)\@@/);
-    const matched = reg.exec(diff);
-    if (!matched) return;
-    console.log("----");
-    console.log(matched);
-  });
+function getThermometer(score: number) {
+  const emptyBar: string = "▢";
+  const filledBar: string = "▣";
+  let thermometerText = "";
+  for (let i = 1; i <= 10; i++) {
+    if (score >= i * 10) {
+      thermometerText = thermometerText + filledBar;
+    } else {
+      thermometerText = thermometerText + emptyBar;
+    }
+  }
+  return thermometerText;
+}
+
+function getColorFromScore(score: number) {
+  const colorIndex = Math.floor(score / 10);
+  switch (colorIndex) {
+    case 0:
+      return "#344ceb";
+    case 1:
+      return "#349feb";
+    case 2:
+      return "#34e8eb";
+    case 3:
+      return "#34eba5";
+    case 4:
+      return "#34eb56";
+    case 5:
+      return "#6eeb34";
+    case 6:
+      return "#c6eb34";
+    case 7:
+      return "#ebbd34";
+    case 8:
+      return "#eb8334";
+    case 9:
+      return "#eb3434";
+    default:
+      return "#eb3434";
+  }
 }
 
 // this method is called when your extension is deactivated
