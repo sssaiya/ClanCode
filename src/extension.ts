@@ -55,9 +55,13 @@ export interface UserStatus {
   lastOnline: number;
   status: string;
   score: number;
+  intensityScore: number;
 }
 let indexedArray: Map<string, UserStatus>;
 let codeScore = 0;
+let typedCount = 0;
+let intensityScore = 0;
+let sessionTime = 0;
 
 export let user: userData;
 // this method is called when your extension is activated
@@ -70,16 +74,27 @@ export async function activate(context: ExtensionContext) {
 
   const gitExtension = vscode.extensions.getExtension("vscode.git");
 
+  let alignment = 10;
+  let barItem1 = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
+  barItem1.color = "#00AA00";
+  let barItem2 = window.createStatusBarItem(StatusBarAlignment.Left, alignment - 0.1);
+  barItem1.color = "#00AA00";
+
   if (gitExtension) {
     const extension = await gitExtension.activate();
-    window.showInformationMessage("Git Extension Activated");
+    const startTime = Math.round(new Date().getTime() / 1000); // MS Epoch to Seconds
+    window.showInformationMessage("CodeBar Exxtension Activated");
     const gitModel = extension.model || extension._model;
     if (!gitModel.openRepositories[0]) return;
     const openRepo = gitModel.openRepositories[0].repository;
     if (openRepo) {
+      initCodeBar(openRepo);
+      setInterval(updateIntensityBar, 5000);
       workspace.onDidChangeTextDocument(handleChange);
+      // TODO figure out why change handler gets called twice for each document change ?
       function handleChange(event: TextDocumentChangeEvent) {
-        getDiffScoreForAllFiles(openRepo);
+        getCodeBar(openRepo);
+        getIntensityBar(startTime, event);
       }
     } else {
       window.showInformationMessage("Download Git Extension first !");
@@ -196,13 +211,15 @@ export async function activate(context: ExtensionContext) {
         state: "offline",
         last_changed: firebase.database.ServerValue.TIMESTAMP,
         user_name: user.username,
-        score: user.score,
+        score: codeScore,
+        intensity: intensityScore
       };
       var isOnlineForDatabase = {
         state: "online",
         last_changed: firebase.database.ServerValue.TIMESTAMP,
         user_name: user.username,
-        score: user.score,
+        score: codeScore,
+        intensity: intensityScore
       };
       firebase
         .database()
@@ -260,6 +277,7 @@ export async function activate(context: ExtensionContext) {
           lastOnline: snapshot.val().last_changed,
           status: snapshot.val().state,
           score: snapshot.val().score,
+          intensityScore : snapshot.val().intensity
         };
         indexedArray.set(username, userStatus);
 
@@ -269,10 +287,8 @@ export async function activate(context: ExtensionContext) {
       });
   }
 
-  let alignment = 10;
 
-  let barItem1 = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
-  barItem1.color = "#00AA00";
+
   // barItem1.text = getThermometer();
   // barItem1.show();
 
@@ -315,19 +331,16 @@ export async function activate(context: ExtensionContext) {
   });
 
   let goOnline = commands.registerCommand("ClanCode.Online", function () {
-    window.showInformationMessage("ONLINE");
-    // offlineIcon.hide();
-    // onlineIcon.show();
     var userStatusDatabaseRef = firebase.database().ref("/status/" + user.uid);
     // firebase.database().
     var isActiveForDatabase = {
       state: "online",
       last_changed: firebase.database.ServerValue.TIMESTAMP,
       user_name: user.username,
-      score: user.score,
+      score: codeScore,
+      intensity: intensityScore
     };
     if (user != undefined) {
-      console.log("Going Active");
       firebase
         .database()
         .ref(".info/connected")
@@ -351,7 +364,8 @@ export async function activate(context: ExtensionContext) {
       state: "away",
       last_changed: firebase.database.ServerValue.TIMESTAMP,
       user_name: user.username,
-      score: user.score,
+      score: codeScore,
+      intensity: intensityScore
     };
     if (user != undefined) {
       console.log("Going Away");
@@ -433,64 +447,48 @@ export async function activate(context: ExtensionContext) {
   );
 
   // Generates Clan tags qunique and not Case Sensitive
-
-  //GIven a repository gets diff line count
-  async function getDiffScoreForAllFiles(repo: IRepository) {
-    // let codeScore: number = 0;
-
-    codeScore = await getScore(repo);
+  async function initCodeBar(repo: IRepository) {
+    codeScore = await getCodeScore(repo);
     barItem1.text = getThermometer(codeScore);
     barItem1.color = getColorFromScore(codeScore);
     barItem1.show();
   }
 
-  async function getScore(repo: IRepository) {
-    let newScore = 0;
-    const changes = repo.workingTreeGroup;
-    for (let i = 0; i < changes.resourceStates.length; i++) {
-      const diffStr: string = await repo.diffWithHEAD(
-        changes.resourceStates[i].resourceUri.fsPath
-      );
-      // Each chunk is prepended by a header inclosed within @@ symbols.
-      const reg: RegExp = new RegExp(/@@(.*?)@@/);
-      const reg2: RegExp = new RegExp(/@@ \-(.*?),(.*?) \+(.*?),(.*?) @@/);
-      const diff = diffStr.split("\n");
-      for (let i = 0; i < diff.length; i++) {
-        const curr = diff[i];
-        const matched = reg.exec(curr);
-        if (!matched) continue;
-        // console.log(matched[0]);
-        const data = reg2.exec(matched[0]);
-        if (data == null) continue;
-        const subtractedFromLineNum: number = parseInt(data[1]);
-        const subtractedLineChanges: number = parseInt(data[2]);
-        const addedFromLineNum: number = parseInt(data[3]);
-        const addedLineChanges: number = parseInt(data[4]);
-
-        //subtracted lines are from subtractedFromLineNum + subtractedLineChanges
-        let affectedLines = [];
-        for (
-          let i = subtractedFromLineNum;
-          i < subtractedFromLineNum + subtractedLineChanges;
-          i++
-        ) {
-          affectedLines.push(i);
-        }
-        for (
-          let i = addedFromLineNum;
-          i < addedFromLineNum + addedLineChanges;
-          i++
-        ) {
-          if (!affectedLines.includes(i)) affectedLines.push(i);
-        }
-        newScore = newScore + affectedLines.length;
-      }
-      // if (codeScore != 0) window.showInformationMessage("Score - " + codeScore);
-
-      // window.showInformationMessage(matched[0]);
+  //GIven a repository gets diff line count
+  async function getCodeBar(repo: IRepository) {
+    // let codeScore: number = 0;
+    const oldScore = Math.floor(codeScore / 10);
+    codeScore = await getCodeScore(repo);
+    const newScore = Math.floor(codeScore / 10);
+    if (oldScore != newScore) {
+      commands.executeCommand("ClanCode.Online")
+      //Only change UI if needed (Increments of 10), or if its fire time
+      barItem1.text = getThermometer(codeScore);
+      barItem1.color = getColorFromScore(codeScore);
+      barItem1.show();
     }
-    return newScore;
   }
+
+  async function getIntensityBar(
+    startTime: number,
+    event: TextDocumentChangeEvent
+  ) {
+    updateTypeCount(event);
+  }
+
+  async function updateIntensityBar() {
+    sessionTime = sessionTime + 5;
+    console.log("HERE in " + sessionTime + "s SCORE - " + typedCount);
+    const mins = sessionTime / 60;
+    const wc = Math.floor(typedCount / 5);
+    intensityScore = Math.floor(wc / mins);
+    const intensityBarText = getThermometer(intensityScore);
+    barItem2.text = intensityBarText;
+    barItem2.show();
+    commands.executeCommand("ClanCode.Online");
+  }
+
+
 
   context.subscriptions.push(
     disposable,
@@ -507,7 +505,7 @@ export async function activate(context: ExtensionContext) {
   );
 }
 
-function getThermometer(score: number) {
+export function getThermometer(score: number) {
   const emptyBar: string = "▢";
   const filledBar: string = "▣";
   let thermometerText = "";
@@ -521,7 +519,7 @@ function getThermometer(score: number) {
   return thermometerText;
 }
 
-function getColorFromScore(score: number) {
+export function getColorFromScore(score: number) {
   const colorIndex = Math.floor(score / 10);
   switch (colorIndex) {
     case 0:
@@ -548,16 +546,73 @@ function getColorFromScore(score: number) {
       return "#eb3434";
   }
 }
+function updateTypeCount(event: TextDocumentChangeEvent) {
+  const change = event.contentChanges;
 
+  // If length is 1 then its a key stroke
+  if (change.length != 1) return;
+  const text: string = change[0].text;
+
+  if (text == "") {
+    const trimmed = text.trim();
+    if (trimmed.length != 0) {
+      // console.log("Copied" + trimmed.length)
+    } else console.log("Backspace")
+  }
+  if (text == " ") { console.log("spacebar") }
+  else {
+    console.log('Added - ' + text.trim().length);
+    const change = text.trim().length;
+    typedCount = typedCount + change
+  }
+}
+
+async function getCodeScore(repo: IRepository) {
+  let newScore = 0;
+  const changes = repo.workingTreeGroup;
+  for (let i = 0; i < changes.resourceStates.length; i++) {
+    const diffStr: string = await repo.diffWithHEAD(
+      changes.resourceStates[i].resourceUri.fsPath
+    );
+    // Each chunk is prepended by a header inclosed within @@ symbols.
+    const reg: RegExp = new RegExp(/@@(.*?)@@/);
+    const reg2: RegExp = new RegExp(/@@ \-(.*?),(.*?) \+(.*?),(.*?) @@/);
+    const diff = diffStr.split("\n");
+    for (let i = 0; i < diff.length; i++) {
+      const curr = diff[i];
+      const matched = reg.exec(curr);
+      if (!matched) continue;
+      // console.log(matched[0]);
+      const data = reg2.exec(matched[0]);
+      if (data == null) continue;
+      const subtractedFromLineNum: number = parseInt(data[1]);
+      const subtractedLineChanges: number = parseInt(data[2]);
+      const addedFromLineNum: number = parseInt(data[3]);
+      const addedLineChanges: number = parseInt(data[4]);
+
+      //subtracted lines are from subtractedFromLineNum + subtractedLineChanges
+      let affectedLines = [];
+      for (
+        let i = subtractedFromLineNum;
+        i < subtractedFromLineNum + subtractedLineChanges;
+        i++
+      ) {
+        affectedLines.push(i);
+      }
+      for (
+        let i = addedFromLineNum;
+        i < addedFromLineNum + addedLineChanges;
+        i++
+      ) {
+        if (!affectedLines.includes(i)) affectedLines.push(i);
+      }
+      newScore = newScore + affectedLines.length;
+    }
+    // if (codeScore != 0) window.showInformationMessage("Score - " + codeScore);
+
+    // window.showInformationMessage(matched[0]);
+  }
+  return newScore;
+}
 // this method is called when your extension is deactivated
-export function deactivate() {}
-
-// function padWithSpaces(name: string, length: number) {
-//   const toPad = length - name.length;
-//   var newString = name;
-//   for (var i = 0; i < toPad; i++) {
-//     if (i % 2 != 0) newString = newString + " ";
-//     else newString = " " + newString;
-//   }
-//   return newString;
-// }
+export function deactivate() { }

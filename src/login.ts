@@ -33,8 +33,8 @@ export async function loginFunction(context: ExtensionContext) {
       }
     });
 
-  context.globalState.update("email", email);
-  context.globalState.update("password", password); // This is a BAD idea but this password is eh... TODO
+  // context.globalState.update("email", email);
+  // context.globalState.update("password", password); // This is a BAD idea but this password is eh... TODO
   // Note - Cant use Login with popup or redirect functionality from firebase auth Documentation
   // as VSCode lacks some support for hhtp storage etc, have to use GitHub OAuth 2.0 endpoints To integrate
   // sign in flow manually

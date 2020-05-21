@@ -6,7 +6,7 @@ import {
   EventEmitter,
   Event,
 } from "vscode";
-import { UserStatus } from "./extension";
+import { UserStatus, getThermometer } from "./extension";
 import path = require("path");
 
 class myItem extends TreeItem {
@@ -14,7 +14,8 @@ class myItem extends TreeItem {
     public readonly label: string,
     private status: string,
     public readonly collapsibleState: TreeItemCollapsibleState,
-    private score: number
+    public readonly score: number,
+    public readonly intensityScore: number
   ) {
     super(label, collapsibleState);
   }
@@ -34,30 +35,51 @@ class myItem extends TreeItem {
   };
 }
 
-export class myTreeDataProvider implements TreeDataProvider<myItem> {
-  constructor(private ClanStatusArray: Map<string, UserStatus>) {}
+class mySubItem extends TreeItem {
+  constructor(
+    public readonly label: string,
+    private score: number
+
+  ) {
+    super(label);
+  }
+
+  get tooltip(): string {
+    return `${this.score}`;
+  }
+}
+
+export class myTreeDataProvider implements TreeDataProvider<TreeItem> {
+  constructor(private ClanStatusArray: Map<string, UserStatus>) { }
 
   getTreeItem(element: myItem): TreeItem | Thenable<myItem> {
     return element;
   }
-  getChildren(element?: myItem | undefined): ProviderResult<myItem[]> {
+  getChildren(element?: myItem | undefined): ProviderResult<TreeItem[]> {
+    var items: Array<TreeItem> = [];
     if (element == undefined) {
       // User element
-      var items: Array<myItem> = [];
       this.ClanStatusArray.forEach((userStatus) => {
         const item = new myItem(
           userStatus.username,
           userStatus.status,
           TreeItemCollapsibleState.Collapsed,
-          userStatus.score
+          userStatus.score,
+          userStatus.intensityScore
         );
         items.push(item);
       });
-
-      return Promise.resolve(items);
     } else {
+      const codeScoreStr = getThermometer(element.score);
+      const intensityScoreStr = getThermometer(element.intensityScore);
+      const subItem = new mySubItem(codeScoreStr, element.score);
+      const subItem2 = new mySubItem(intensityScoreStr, element.score);
+
       // Add actions other stuff here (Shown on click)
+      items.push(subItem);
+      items.push(subItem2);
     }
+    return Promise.resolve(items);
   }
 
   private _onDidChangeTreeData: EventEmitter<
