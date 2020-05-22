@@ -148,58 +148,6 @@ export async function activate(context: ExtensionContext) {
           treeDataProvider.refresh()
         );
       }
-
-      // async function handleChange(event: TextDocumentChangeEvent) {
-      //   const change = event.contentChanges;
-
-      //   // If length is 1 then its a key stroke
-      //   if (change.length != 1) return;
-
-      //   const text: string = change[0].text;
-      //   if (text == "") {
-      //     console.log(change[0]); //fix bug where copying code subtracts score it comes here for some reason
-      //     window.showInformationMessage("Backspace - " + text.length);
-      //     const deletedLength = change[0].rangeLength; // Get length of whatever was highlighted
-      //     const newVal = user.score - deletedLength;
-      //     user.score = newVal < 0 ? 0 : newVal;
-      //   } else if (text == " ") {
-      //     // window.showInformationMessage("Space");
-      //     user.score = user.score + 1;
-      //   } else {
-      //     const trimmedText = text.trim();
-      //     if (trimmedText.length > 0) {
-      //       const clipText: string = clipboardy.readSync();
-      //       if (clipText == text) {
-      //         window.showInformationMessage("Copied some code ? Boo!");
-      //         return;
-      //       } else {
-      //         const newVal =
-      //           user.score + trimmedText.length - change[0].rangeLength;
-      //         user.score = newVal < 0 ? 0 : newVal;
-      //       }
-      //     }
-      //   }
-      //   var updatedScoreStatus = {
-      //     state: "online",
-      //     last_changed: firebase.database.ServerValue.TIMESTAMP,
-      //     user_name: user.username,
-      //     score: user.score,
-      //   };
-      //   if (user != undefined) {
-      //     firebase
-      //       .database()
-      //       .ref(".info/connected")
-      //       .on("value", function (snapshot) {
-      //         // If we're not currently connected, don't do anything.
-      //         if (snapshot.val() == false) {
-      //           return;
-      //         }
-
-      //         userStatusDatabaseRef.set(updatedScoreStatus);
-      //       });
-      //   }
-      // }
-
       // * START PERSISTENCE WITH FIRESTORE *//
       // Create a reference to this user's specific status node.
       // This is where we will store data about being online/offline.
@@ -287,31 +235,6 @@ export async function activate(context: ExtensionContext) {
       });
   }
 
-
-
-  // barItem1.text = getThermometer();
-  // barItem1.show();
-
-  //let barItem = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
-  // let onlineIcon = window.createStatusBarItem(
-  //   StatusBarAlignment.Left,
-  //   alignment - 0.1
-  // );
-  // let offlineIcon = window.createStatusBarItem(
-  //   StatusBarAlignment.Left,
-  //   alignment - 0.1
-  // );
-  // barItem.command = "ClanCode.onClick";
-  // barItem.text = "ClanCode";
-  // barItem.show();
-
-  // offlineIcon.command = "ClanCode.Online";
-  // offlineIcon.text = "$(debug-hint)";
-
-  // onlineIcon.command = "ClanCode.Offline";
-  // onlineIcon.text = "$(circle-filled)";
-  // // onlineIcon.text.fontcolor TODO MAKE THIS GREEN / make custom icons
-  // onlineIcon.show();
 
   // The command has been defined in the package.json file
   // Now provide the implementation of the command with  registerCommand
