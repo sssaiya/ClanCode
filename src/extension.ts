@@ -19,6 +19,8 @@ import { registerFunction } from "./register";
 import { loginFunction } from "./login";
 import { createClan, joinClan } from "./clanFunctions";
 
+let openRepo: IRepository;
+
 // import { SourceControlResourceGroup, SourceControlResourceState } from "vscode"
 
 export interface IGitResourceGroup extends SourceControlResourceGroup {
@@ -78,7 +80,7 @@ export async function activate(context: ExtensionContext) {
   let barItem1 = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
   barItem1.color = "#00AA00";
   let barItem2 = window.createStatusBarItem(StatusBarAlignment.Left, alignment - 0.1);
-  barItem1.color = "#00AA00";
+  barItem2.color = "#00AA00";
 
   if (gitExtension) {
     const extension = await gitExtension.activate();
@@ -86,15 +88,15 @@ export async function activate(context: ExtensionContext) {
     window.showInformationMessage("CodeBar Exxtension Activated");
     const gitModel = extension.model || extension._model;
     if (!gitModel.openRepositories[0]) return;
-    const openRepo = gitModel.openRepositories[0].repository;
+    openRepo = gitModel.openRepositories[0].repository;
     if (openRepo) {
-      initCodeBar(openRepo);
+      //initCodeBar(openRepo);
       setInterval(updateIntensityBar, 5000);
+      setInterval(getCodeBar, 5000);
       workspace.onDidChangeTextDocument(handleChange);
       // TODO figure out why change handler gets called twice for each document change ?
       function handleChange(event: TextDocumentChangeEvent) {
-        getCodeBar(openRepo);
-        getIntensityBar(startTime, event);
+        getIntensityBar(event);
       }
     } else {
       window.showInformationMessage("Download Git Extension first !");
@@ -225,7 +227,7 @@ export async function activate(context: ExtensionContext) {
           lastOnline: snapshot.val().last_changed,
           status: snapshot.val().state,
           score: snapshot.val().score,
-          intensityScore : snapshot.val().intensity
+          intensityScore: snapshot.val().intensity
         };
         indexedArray.set(username, userStatus);
 
@@ -370,45 +372,47 @@ export async function activate(context: ExtensionContext) {
   );
 
   // Generates Clan tags qunique and not Case Sensitive
-  async function initCodeBar(repo: IRepository) {
-    codeScore = await getCodeScore(repo);
-    barItem1.text = getThermometer(codeScore);
-    barItem1.color = getColorFromScore(codeScore);
-    barItem1.show();
-  }
+  // async function initCodeBar(repo: IRepository) {
+  //   console.log("Init code bar");
+  //   codeScore = await getCodeScore(repo);
+  //   barItem1.text = getCodeBarString(codeScore);
+  //   barItem1.color = getColorFromScore(codeScore);
+  //   barItem1.show();
+  // }
 
   //GIven a repository gets diff line count
-  async function getCodeBar(repo: IRepository) {
+  async function getCodeBar() {
     // let codeScore: number = 0;
-    const oldScore = Math.floor(codeScore / 10);
-    codeScore = await getCodeScore(repo);
-    const newScore = Math.floor(codeScore / 10);
-    if (oldScore != newScore) {
-      commands.executeCommand("ClanCode.Online")
-      //Only change UI if needed (Increments of 10), or if its fire time
-      barItem1.text = getThermometer(codeScore);
-      barItem1.color = getColorFromScore(codeScore);
-      barItem1.show();
-    }
+    console.log("In Get code bar");
+    codeScore = await getCodeScore(openRepo);
+
+    barItem1.text = getCodeBarString(codeScore);
+    barItem1.color = getColorFromScore(codeScore);
+    barItem1.show(); // update codebar
+
+    commands.executeCommand("ClanCode.Online")
+    //Only change UI if needed (Increments of 10), or if its fire time
+
   }
 
   async function getIntensityBar(
-    startTime: number,
     event: TextDocumentChangeEvent
   ) {
     updateTypeCount(event);
   }
 
-  async function updateIntensityBar() {
+  function updateIntensityBar() {
+
     sessionTime = sessionTime + 5;
-    console.log("HERE in " + sessionTime + "s SCORE - " + typedCount);
+    // console.log("HERE in " + sessionTime + "s SCORE - " + typedCount);
     const mins = sessionTime / 60;
     const wc = Math.floor(typedCount / 5);
     intensityScore = Math.floor(wc / mins);
     const intensityBarText = getThermometer(intensityScore);
     barItem2.text = intensityBarText;
     barItem2.show();
-    commands.executeCommand("ClanCode.Online");
+
+    //commands.executeCommand("ClanCode.Online");
   }
 
 
@@ -428,10 +432,26 @@ export async function activate(context: ExtensionContext) {
   );
 }
 
-export function getThermometer(score: number) {
+export function getCodeBarString(score: number) {
+  const shield: string = "🛡";
   const emptyBar: string = "▢";
   const filledBar: string = "▣";
-  let thermometerText = "";
+  const shieldScore = 100 - score;
+  let thermometerText = shield + "(" + shieldScore + ") ";
+  for (let i = 1; i <= 10; i++) {
+    if (shieldScore >= i * 10) {
+      thermometerText = thermometerText + filledBar;
+    } else {
+      thermometerText = thermometerText + emptyBar;
+    }
+  }
+  return thermometerText;
+}
+export function getThermometer(score: number) {
+  const sword: string = "🗡";
+  const emptyBar: string = "▢";
+  const filledBar: string = "▣";
+  let thermometerText = sword + "("+score+") ";
   for (let i = 1; i <= 10; i++) {
     if (score >= i * 10) {
       thermometerText = thermometerText + filledBar;
@@ -491,6 +511,7 @@ function updateTypeCount(event: TextDocumentChangeEvent) {
 }
 
 async function getCodeScore(repo: IRepository) {
+  const startTime = (new Date().getTime()); // MS Epoch to Seconds
   let newScore = 0;
   const changes = repo.workingTreeGroup;
   for (let i = 0; i < changes.resourceStates.length; i++) {
@@ -535,6 +556,8 @@ async function getCodeScore(repo: IRepository) {
 
     // window.showInformationMessage(matched[0]);
   }
+  const endTime = (new Date().getTime()); // MS Epoch to Seconds
+  console.log("Update Codebar took " + (endTime - startTime) + "ms to run");
   return newScore;
 }
 // this method is called when your extension is deactivated

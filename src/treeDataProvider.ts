@@ -6,7 +6,7 @@ import {
   EventEmitter,
   Event,
 } from "vscode";
-import { UserStatus, getThermometer } from "./extension";
+import { UserStatus, getThermometer, getCodeBarString } from "./extension";
 import path = require("path");
 
 class myItem extends TreeItem {
@@ -70,7 +70,7 @@ export class myTreeDataProvider implements TreeDataProvider<TreeItem> {
         items.push(item);
       });
     } else {
-      const codeScoreStr = getThermometer(element.score);
+      const codeScoreStr = getCodeBarString(element.score);
       const intensityScoreStr = getThermometer(element.intensityScore);
       const subItem = new mySubItem(codeScoreStr, element.score);
       const subItem2 = new mySubItem(intensityScoreStr, element.score);
