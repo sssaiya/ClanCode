@@ -1,19 +1,48 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 // import * as vscode from "vscode";
-import { ExtensionContext, commands, window, StatusBarAlignment } from "vscode";
+import {
+  ExtensionContext,
+  commands,
+  window,
+  StatusBarAlignment,
+  workspace,
+  TextDocumentChangeEvent,
+  SourceControlResourceState,
+  SourceControlResourceGroup,
+  languages,
+  Hover,
+} from "vscode";
+import * as vscode from "vscode";
 import { myTreeDataProvider } from "./treeDataProvider";
 import { firebaseConfig } from "./config";
-import { INVALID_EMAIL, INCORRECT_PASSWORD, USER_NOT_FOUND } from "./constants";
 import * as firebase from "firebase";
+import { registerFunction } from "./register";
+import { loginFunction } from "./login";
+import { createClan, joinClan } from "./clanFunctions";
 
-class userData {
+let openRepo: IRepository;
+
+// import { SourceControlResourceGroup, SourceControlResourceState } from "vscode"
+
+export interface IGitResourceGroup extends SourceControlResourceGroup {
+  resourceStates: SourceControlResourceState[];
+}
+
+interface IRepository {
+  diffWithHEAD(path: string): Promise<string>;
+  workingTreeGroup: IGitResourceGroup;
+  indexGroup: IGitResourceGroup;
+  mergeGroup: IGitResourceGroup;
+}
+export class userData {
   uid: string;
   username: string | null;
   useremail: string | null;
   isInClan: boolean;
   clanTag: string | null;
   clanName: string | null;
+  score: number;
 
   constructor(uid: string) {
     this.uid = uid;
@@ -22,26 +51,72 @@ class userData {
     this.isInClan = false;
     this.clanTag = null;
     this.clanName = null;
+    this.score = 0;
   }
 }
+export interface UserStatus {
+  username: string;
+  lastOnline: number;
+  status: string;
+  score: number;
+  intensityScore: number;
+}
+let indexedArray: Map<string, UserStatus>;
+let codeScore = 0;
+let typedCount = 0;
+let intensityScore = 0;
+let sessionTime = 0;
+
+export let user: userData;
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export async function activate(context: ExtensionContext) {
-  let user: userData;
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
+  // languages.registerHoverProvider('*', {
+  //   provideHover(document, position, token) {
+  //     let markdownString = new vscode.MarkdownString('![IMGEE](https://thejournal.com/-/media/EDU/THEJournal/Images/2015/02/20150224test644.jpg)');
+  //     return new Hover(markdownString);
+  //   }
+  // });
+  //let markdownString = new vscode.MarkdownString('![IMGEE](https://thejournal.com/-/media/EDU/THEJournal/Images/2015/02/20150224test644.jpg)');
+  //* in case you wanted to hover*
+
+  indexedArray = new Map<string, UserStatus>();
   console.log('Congratulations, your extension "ClanCode" is now active!');
 
-  // The command has been defined in the package.json file
-  // Now provide the implementation of the command with registerCommand
-  // The commandId parameter must match the command field in package.json
   firebase.initializeApp(firebaseConfig);
 
+  const gitExtension = vscode.extensions.getExtension("vscode.git");
+
+  let alignment = 10;
+  let barItem1 = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
+  barItem1.color = "#00AA00";
+  let barItem2 = window.createStatusBarItem(StatusBarAlignment.Left, alignment - 0.1);
+  barItem2.color = "#00AA00";
+
+  if (gitExtension) {
+    const extension = await gitExtension.activate();
+    const startTime = Math.round(new Date().getTime() / 1000); // MS Epoch to Seconds
+    window.showInformationMessage("CodeBar Exxtension Activated");
+    const gitModel = extension.model || extension._model;
+    if (!gitModel.openRepositories[0]) return;
+    openRepo = gitModel.openRepositories[0].repository;
+    if (openRepo) {
+      //initCodeBar(openRepo);
+      setInterval(updateIntensityBar, 5000);
+      setInterval(getCodeBar, 5000);
+      workspace.onDidChangeTextDocument(handleChange);
+      // TODO figure out why change handler gets called twice for each document change ?
+      function handleChange(event: TextDocumentChangeEvent) {
+        getIntensityBar(event);
+      }
+    } else {
+      window.showInformationMessage("Download Git Extension first !");
+    }
+  }
+
   firebase.auth().onAuthStateChanged(async function (firebaseUser) {
-    console.log("IN AUTH STATE CHANGE");
     if (firebaseUser) {
       user = new userData(firebaseUser.uid);
-
       // Get userdata from firebase
       await firebase
         .database()
@@ -56,6 +131,8 @@ export async function activate(context: ExtensionContext) {
           // userData = snapshot.val();
         });
 
+      user.score = 0;
+
       var displayString = "Hello - " + user.username;
 
       if (user.isInClan) {
@@ -67,6 +144,23 @@ export async function activate(context: ExtensionContext) {
       }
       window.showInformationMessage(displayString);
 
+      getClan(); // Might have to call this from somewhere else as well.
+
+      //Change sidebar menu name to clan name
+      if (user.isInClan) {
+        const treeDataProvider: myTreeDataProvider = new myTreeDataProvider(
+          indexedArray
+        );
+        let treeView = window.createTreeView("clanCode", {
+          treeDataProvider: treeDataProvider,
+        });
+        treeView.title = user.clanName || undefined;
+        // treeView.message = user.clanTag || undefined;
+
+        commands.registerCommand("ClanCode.refresh", () =>
+          treeDataProvider.refresh()
+        );
+      }
       // * START PERSISTENCE WITH FIRESTORE *//
       // Create a reference to this user's specific status node.
       // This is where we will store data about being online/offline.
@@ -78,11 +172,15 @@ export async function activate(context: ExtensionContext) {
         state: "offline",
         last_changed: firebase.database.ServerValue.TIMESTAMP,
         user_name: user.username,
+        score: codeScore,
+        intensity: intensityScore
       };
       var isOnlineForDatabase = {
         state: "online",
         last_changed: firebase.database.ServerValue.TIMESTAMP,
         user_name: user.username,
+        score: codeScore,
+        intensity: intensityScore
       };
       firebase
         .database()
@@ -109,32 +207,47 @@ export async function activate(context: ExtensionContext) {
     }
   });
 
-  let treeView = window.createTreeView("clanCode", {
-    treeDataProvider: new myTreeDataProvider(),
-  });
+  function getClan() {
+    if (user != undefined && user.isInClan) {
+      console.log("HERE, getting clan");
+      firebase
+        .database()
+        .ref("/clans/" + user.clanTag + "/members")
+        .once("value")
+        .then(function (snapshot) {
+          snapshot.forEach(function (childSnapshot) {
+            const memberUID: string = childSnapshot.val();
+            getStatus(memberUID);
+          });
+        })
+        .catch(function (error) {
+          //TODO error handling
+        });
+    }
+  }
 
-  let alignment = 10;
+  function getStatus(uid: string) {
+    console.log(uid);
+    firebase
+      .database()
+      .ref("/status/" + uid) // on value makes this function listen and fire for every change on this route
+      .on("value", function (snapshot) {
+        const username = snapshot.val().user_name;
+        const userStatus: UserStatus = {
+          username: snapshot.val().user_name,
+          lastOnline: snapshot.val().last_changed,
+          status: snapshot.val().state,
+          score: snapshot.val().score,
+          intensityScore: snapshot.val().intensity
+        };
+        indexedArray.set(username, userStatus);
 
-  let barItem = window.createStatusBarItem(StatusBarAlignment.Left, alignment);
-  let onlineIcon = window.createStatusBarItem(
-    StatusBarAlignment.Left,
-    alignment - 0.1
-  );
-  let offlineIcon = window.createStatusBarItem(
-    StatusBarAlignment.Left,
-    alignment - 0.1
-  );
-  barItem.command = "ClanCode.onClick";
-  barItem.text = "ClanCode";
-  barItem.show();
+        user.score = snapshot.val().score;
+        // Refresh Tree view
+        commands.executeCommand("ClanCode.refresh");
+      });
+  }
 
-  offlineIcon.command = "ClanCode.Online";
-  offlineIcon.text = "$(debug-hint)";
-
-  onlineIcon.command = "ClanCode.Offline";
-  onlineIcon.text = "$(circle-filled)";
-  // onlineIcon.text.fontcolor TODO MAKE THIS GREEN / make custom icons
-  onlineIcon.show();
 
   // The command has been defined in the package.json file
   // Now provide the implementation of the command with  registerCommand
@@ -154,18 +267,16 @@ export async function activate(context: ExtensionContext) {
   });
 
   let goOnline = commands.registerCommand("ClanCode.Online", function () {
-    window.showInformationMessage("ONLINE");
-    offlineIcon.hide();
-    onlineIcon.show();
     var userStatusDatabaseRef = firebase.database().ref("/status/" + user.uid);
     // firebase.database().
     var isActiveForDatabase = {
-      state: "Active",
+      state: "online",
       last_changed: firebase.database.ServerValue.TIMESTAMP,
       user_name: user.username,
+      score: codeScore,
+      intensity: intensityScore
     };
-    if (user == undefined) {
-      console.log("Going Active");
+    if (user != undefined) {
       firebase
         .database()
         .ref(".info/connected")
@@ -181,14 +292,16 @@ export async function activate(context: ExtensionContext) {
   });
   let goOffline = commands.registerCommand("ClanCode.Offline", function () {
     window.showInformationMessage("OFFLINE");
-    onlineIcon.hide();
-    offlineIcon.show();
+    // onlineIcon.hide();
+    // offlineIcon.show();
     var userStatusDatabaseRef = firebase.database().ref("/status/" + user.uid);
     // firebase.database().
     var isAwayForDatabase = {
       state: "away",
       last_changed: firebase.database.ServerValue.TIMESTAMP,
       user_name: user.username,
+      score: codeScore,
+      intensity: intensityScore
     };
     if (user != undefined) {
       console.log("Going Away");
@@ -208,212 +321,17 @@ export async function activate(context: ExtensionContext) {
 
   let register = commands.registerCommand(
     "ClanCode.Register",
-    async function () {
-      const email = await window.showInputBox({
-        placeHolder: "Eg. superstar@clancode.com",
-        prompt: "Enter your email to Sign up with ClanCode",
-      });
-      const userName = await window.showInputBox({
-        placeHolder: "",
-        prompt:
-          "Enter your Username (This is how your clan mates will see you !)",
-      });
-      const password = await window.showInputBox({
-        placeHolder: "",
-        prompt: "Enter your desired password",
-        password: true,
-      });
-      const password2 = await window.showInputBox({
-        placeHolder: "",
-        prompt: "Re-Enter your password",
-        password: true,
-      });
-
-      if (password != password2) {
-        window.showInformationMessage(
-          "Password Didn't Match! Please try again"
-        );
-        return;
-      }
-
-      if (
-        email == undefined ||
-        password == undefined ||
-        userName == undefined
-      ) {
-        // TODO add error handling
-        return;
-      }
-      await firebase
-        .auth()
-        .createUserWithEmailAndPassword(email, password)
-        .catch(function (error) {
-          console.log(errorMessage);
-          // Handle Errors here.
-          if ((error.code = INVALID_EMAIL)) {
-            window.showInformationMessage(
-              "The email - " + email + "is Invalid"
-            );
-          }
-          var errorMessage = error.message;
-          console.log(error.code);
-          // ...
-        });
-
-      // if(userCred == null);
-      let currentUser = firebase.auth().currentUser;
-      if (currentUser == null) return;
-      user.uid = currentUser.uid;
-
-      user.username = userName;
-      user.useremail = email;
-
-      //Add user metaData
-      firebase
-        .database()
-        .ref("/users/" + user.uid)
-        .set(userData);
-
-      window.showInformationMessage("Registering " + email);
-    }
+    registerFunction
   );
 
-  let logIn = commands.registerCommand("ClanCode.LogIn", async function () {
-    const email = await window.showInputBox({
-      placeHolder: "superstar@clancode.com",
-      prompt: "Enter your email to log into ClanCode",
-    });
-    const password = await window.showInputBox({
-      placeHolder: "",
-      prompt: "Enter your password to log into ClanCode",
-      password: true,
-    });
+  let logIn = commands.registerCommand("ClanCode.LogIn", loginFunction);
 
-    if (email == undefined || password == undefined) return;
-
-    firebase
-      .auth()
-      .signInWithEmailAndPassword(email, password)
-      .catch(function (error) {
-        console.log(error.code);
-        if (error.code == USER_NOT_FOUND) {
-          window.showInformationMessage(
-            "User - " +
-              email +
-              " not found, Please check of you mistyped it, else Register email First using command " +
-              "ClanCode: Register your account!"
-          );
-        }
-        if ((error.code = INCORRECT_PASSWORD)) {
-          window.showInformationMessage("Invalid Password ! Try again ");
-        }
-      });
-
-    // Note - Cant use Login with popup or redirect functionality from firebase auth Documentation
-    // as VSCode lacks some support for hhtp storage etc, have to use GitHub OAuth 2.0 endpoints To integrate
-    // sign in flow manually
-  });
   let createClanMenu = commands.registerCommand(
     "ClanCode.createClan",
-    async function createClan() {
-      // const checkButton = QuickInputButtons;
-      // Note, Buttons need Typescript, learn it soon
-      // const button = vscode.QuickInputButton().;
-      const clanName = await window.showInputBox({
-        placeHolder: "Eg. StarHackers",
-        prompt: "Enter Clan Name",
-      });
-
-      if (clanName == undefined) return;
-      const clanTag = GetUniqueClanTag(6);
-      window.showInformationMessage(clanTag);
-
-      //https://stackoverflow.com/questions/9543715/generating-human-readable-usable-short-but-unique-ids
-
-      //Create the clann in DB
-      var newClanDatabaseRef = firebase.database().ref("/clans/" + clanTag);
-      newClanDatabaseRef
-        .set({
-          name: clanName,
-          created: firebase.database.ServerValue.TIMESTAMP,
-        })
-        .catch(function (error) {
-          console.log("Create Clan Error -");
-          console.log(error);
-        });
-
-      //Add Creator to the Clan
-      var clanMembersDatabaseRef = firebase
-        .database()
-        .ref("/clans/" + clanTag + "/members");
-      clanMembersDatabaseRef.push(user.uid);
-
-      window.showInformationMessage(
-        "Created Clan - " + clanName + " And Clan Tag - " + clanTag
-      );
-
-      user.isInClan = true;
-      user.clanTag = clanTag;
-      user.clanName = clanName;
-
-      //Add user metaData
-      firebase
-        .database()
-        .ref("/users/" + user.uid)
-        .set(userData);
-    }
+    createClan
   );
 
-  let joinClanMenu = commands.registerCommand(
-    "ClanCode.joinClan",
-    async function joinClan() {
-      const clanTagLowerCase = await window.showInputBox({
-        placeHolder: "Eg. ******",
-        prompt: "Join a Clan via its ClanTag",
-      });
-
-      if (clanTagLowerCase == undefined) return;
-      const clanTag = clanTagLowerCase.toUpperCase(); //Configured to be case insensitive in DB :)
-
-      var clanName = null;
-      await firebase
-        .database()
-        .ref("clans/" + clanTag)
-        .on("value", function (snapshot) {
-          if (snapshot.val() != null) {
-            clanName = snapshot.val().name;
-          } else {
-            console.log("ERROR WRONG CLAN TAG");
-          }
-        });
-
-      if (clanName == null) {
-        window.showInformationMessage(
-          "Clan with Tag -" +
-            clanTag +
-            " doesn't exist, create or join via Clan Tag"
-        );
-        return;
-      }
-
-      console.log("Attempting to join clan" + clanName);
-
-      //Add to the Clan
-      var clanMembersDatabaseRef = firebase
-        .database()
-        .ref("/clans/" + clanTag + "/members");
-      clanMembersDatabaseRef.push(user.uid);
-
-      user.clanTag = clanTag;
-      user.isInClan = true;
-      user.clanName = clanName;
-
-      firebase
-        .database()
-        .ref("/users/" + user.uid)
-        .set(userData);
-    }
-  );
+  let joinClanMenu = commands.registerCommand("ClanCode.joinClan", joinClan);
 
   // Make one command opening this menu to execute the other commands :)
   let CodeGameMenu = commands.registerCommand(
@@ -430,6 +348,7 @@ export async function activate(context: ExtensionContext) {
           options.push("Join Clan");
         }
       }
+
       const result = await window.showQuickPick(options, {
         placeHolder: "Welcome To ClanCode",
         onDidSelectItem: (item) => {
@@ -464,13 +383,57 @@ export async function activate(context: ExtensionContext) {
   );
 
   // Generates Clan tags qunique and not Case Sensitive
+  // async function initCodeBar(repo: IRepository) {
+  //   console.log("Init code bar");
+  //   codeScore = await getCodeScore(repo);
+  //   barItem1.text = getCodeBarString(codeScore);
+  //   barItem1.color = getColorFromScore(codeScore);
+  //   barItem1.show();
+  // }
+
+  //GIven a repository gets diff line count
+  async function getCodeBar() {
+    // let codeScore: number = 0;
+    console.log("In Get code bar");
+    codeScore = await getCodeScore(openRepo);
+
+    barItem1.text = getCodeBarString(codeScore);
+    barItem1.color = getColorFromScore(codeScore);
+    barItem1.show(); // update codebar
+
+    commands.executeCommand("ClanCode.Online")
+    //Only change UI if needed (Increments of 10), or if its fire time
+
+  }
+
+  async function getIntensityBar(
+    event: TextDocumentChangeEvent
+  ) {
+    updateTypeCount(event);
+  }
+
+  function updateIntensityBar() {
+
+    sessionTime = sessionTime + 5;
+    // console.log("HERE in " + sessionTime + "s SCORE - " + typedCount);
+    const mins = sessionTime / 60;
+    const wc = Math.floor(typedCount / 5);
+    intensityScore = Math.floor(wc / mins);
+    const intensityBarText = getThermometer(intensityScore);
+    barItem2.text = intensityBarText;
+    barItem2.show();
+
+    //commands.executeCommand("ClanCode.Online");
+  }
+
+
 
   context.subscriptions.push(
     disposable,
-    barItem,
+    // barItem,
     goOnline,
-    onlineIcon,
-    offlineIcon,
+    // onlineIcon,
+    // offlineIcon,
     goOffline,
     logIn,
     register,
@@ -480,32 +443,136 @@ export async function activate(context: ExtensionContext) {
   );
 }
 
+export function getCodeBarString(score: number) {
+  const shield: string = "🛡";
+  const emptyBar: string = "▢";
+  const filledBar: string = "▣";
+  const shieldScore = 100 - score;
+  let thermometerText = shield + "(" + shieldScore + ") ";
+  for (let i = 1; i <= 10; i++) {
+    if (shieldScore >= i * 10) {
+      thermometerText = thermometerText + filledBar;
+    } else {
+      thermometerText = thermometerText + emptyBar;
+    }
+  }
+  return thermometerText;
+}
+export function getThermometer(score: number) {
+  const sword: string = "🗡";
+  const emptyBar: string = "▢";
+  const filledBar: string = "▣";
+  let thermometerText = sword + "(" + score + ") ";
+  for (let i = 1; i <= 10; i++) {
+    if (score >= i * 10) {
+      thermometerText = thermometerText + filledBar;
+    } else {
+      thermometerText = thermometerText + emptyBar;
+    }
+  }
+  return thermometerText;
+}
+
+export function getColorFromScore(score: number) {
+  window.showInformationMessage("Score - "+score);
+  const colorIndex = Math.floor(score / 10);
+  switch (colorIndex) {
+    case 0:
+      return "#66FF66"; // Screamin' Green
+    case 1:
+      return "#A7F432"; //Green Lizard
+    case 2:
+      return "#2243B6"; //Denim Blue
+    case 3:
+      return "#5DADEC"; //Blue Jeans	
+    case 4:
+      return "#34eb56"; // TODO add appropriate colors
+    case 5:
+      return "#6eeb34";
+    case 6:
+      return "#c6eb34";
+    case 7:
+      return "#ebbd34";
+    case 8:
+      return "#eb8334";
+    case 9:
+      return "#eb3434";
+    default:
+      return "#eb3434";
+  }
+}
+function updateTypeCount(event: TextDocumentChangeEvent) {
+  const change = event.contentChanges;
+
+  // If length is 1 then its a key stroke
+  if (change.length != 1) return;
+  const text: string = change[0].text;
+
+  if (text == "") {
+    const trimmed = text.trim();
+    if (trimmed.length != 0) {
+      // console.log("Copied" + trimmed.length)
+    } else console.log("Backspace")
+  }
+  if (text == " ") { console.log("spacebar") }
+  else {
+    console.log('Added - ' + text.trim().length);
+    const change = text.trim().length;
+    typedCount = typedCount + change
+  }
+}
+
+//TODO FIX bug where initially score increases by a much higher number
+async function getCodeScore(repo: IRepository) {
+  const startTime = (new Date().getTime()); // MS Epoch to Seconds
+  let newScore = 0;
+  const changes = repo.workingTreeGroup;
+  for (let i = 0; i < changes.resourceStates.length; i++) {
+    const diffStr: string = await repo.diffWithHEAD(
+      changes.resourceStates[i].resourceUri.fsPath
+    );
+    // Each chunk is prepended by a header inclosed within @@ symbols.
+    const reg: RegExp = new RegExp(/@@(.*?)@@/);
+    const reg2: RegExp = new RegExp(/@@ \-(.*?),(.*?) \+(.*?),(.*?) @@/);
+    const diff = diffStr.split("\n");
+    console.log(diffStr);
+    for (let i = 0; i < diff.length; i++) {
+      const curr = diff[i];
+      const matched = reg.exec(curr);
+      if (!matched) continue;
+      // console.log(matched[0]);
+      const data = reg2.exec(matched[0]);
+      if (data == null) continue;
+      const subtractedFromLineNum: number = parseInt(data[1]);
+      const subtractedLineChanges: number = parseInt(data[2]);
+      const addedFromLineNum: number = parseInt(data[3]);
+      const addedLineChanges: number = parseInt(data[4]);
+
+      //subtracted lines are from subtractedFromLineNum + subtractedLineChanges
+      let affectedLines = [];
+      for (
+        let i = subtractedFromLineNum;
+        i < subtractedFromLineNum + subtractedLineChanges;
+        i++
+      ) {
+        affectedLines.push(i);
+      }
+      for (
+        let i = addedFromLineNum;
+        i < addedFromLineNum + addedLineChanges;
+        i++
+      ) {
+        if (!affectedLines.includes(i)) affectedLines.push(i);
+      }
+      newScore = newScore + affectedLines.length;
+    }
+    // if (codeScore != 0) window.showInformationMessage("Score - " + codeScore);
+
+    // window.showInformationMessage(matched[0]);
+  }
+  const endTime = (new Date().getTime()); // MS Epoch to Seconds
+  console.log("Update Codebar took " + (endTime - startTime) + "ms to run");
+  return newScore;
+}
 // this method is called when your extension is deactivated
-export function deactivate() {}
-
-//https:stackoverflow.com/questions/9543715/generating-human-readable-usable-short-but-unique-ids
-function GetUniqueClanTag(length: number) {
-  const _base62chars =
-    "123456789BCDFGHJKLMNPQRSTVWXYZabcdefghijklmnopqrstuvwxyz";
-  // Removed I as confused with 1
-  // Removed O and 0
-  // function random = Math.random()
-  // Remove Remaninig vowels(U, E, A) to prevent bad word generation
-  var tagBuilder = "";
-
-  for (var i = 0; i < length; i++) {
-    const keyIndex = Math.floor(Math.random() * 27); // Changed 33 to 27 as removed 6 characters
-    tagBuilder = tagBuilder + _base62chars.charAt(keyIndex);
-  }
-  return tagBuilder;
-}
-
-function padWithSpaces(name: string, length: number) {
-  const toPad = length - name.length;
-  var newString = name;
-  for (var i = 0; i < toPad; i++) {
-    if (i % 2 != 0) newString = newString + " ";
-    else newString = " " + newString;
-  }
-  return newString;
-}
+export function deactivate() { }

@@ -18,6 +18,14 @@
       {
         "command": "ClanCode.CodeGame",
         "title": "Code with your Clan"
+      },
+      {
+        "command": "ClanCode.status",
+        "title": "status",
+        "icon": {
+          "light": "images/test.svg",
+          "dark": "images/test.svg"
+        }
       }
     ],
     "views": {
@@ -27,7 +35,22 @@
           "name": "Clan Code"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "clanCode",
+        "contents": "Log in and join a clan to [get started](https://www.npmjs.com/)!\n[Log in](command:ClanCode.CodeGame)"
+      }
+    ]
+  },
+  "menus": {
+    "view/item/context": [
+      {
+        "command": "ClanCode.status",
+        "when": "view == myTreeDataProvider && viewItem == myItem",
+        "group": "inline"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -51,6 +74,7 @@
     "vscode-test": "^1.3.0"
   },
   "dependencies": {
+    "clipboardy": "^2.3.0",
     "firebase": "^7.14.3",
     "vsls": "^1.0.1830"
   }
