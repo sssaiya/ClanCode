@@ -10,6 +10,8 @@ import {
   TextDocumentChangeEvent,
   SourceControlResourceState,
   SourceControlResourceGroup,
+  languages,
+  Hover,
 } from "vscode";
 import * as vscode from "vscode";
 import { myTreeDataProvider } from "./treeDataProvider";
@@ -69,6 +71,15 @@ export let user: userData;
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export async function activate(context: ExtensionContext) {
+  // languages.registerHoverProvider('*', {
+  //   provideHover(document, position, token) {
+  //     let markdownString = new vscode.MarkdownString('![IMGEE](https://thejournal.com/-/media/EDU/THEJournal/Images/2015/02/20150224test644.jpg)');
+  //     return new Hover(markdownString);
+  //   }
+  // });
+  //let markdownString = new vscode.MarkdownString('![IMGEE](https://thejournal.com/-/media/EDU/THEJournal/Images/2015/02/20150224test644.jpg)');
+  //* in case you wanted to hover*
+
   indexedArray = new Map<string, UserStatus>();
   console.log('Congratulations, your extension "ClanCode" is now active!');
 
@@ -451,7 +462,7 @@ export function getThermometer(score: number) {
   const sword: string = "🗡";
   const emptyBar: string = "▢";
   const filledBar: string = "▣";
-  let thermometerText = sword + "("+score+") ";
+  let thermometerText = sword + "(" + score + ") ";
   for (let i = 1; i <= 10; i++) {
     if (score >= i * 10) {
       thermometerText = thermometerText + filledBar;
@@ -463,18 +474,19 @@ export function getThermometer(score: number) {
 }
 
 export function getColorFromScore(score: number) {
+  window.showInformationMessage("Score - "+score);
   const colorIndex = Math.floor(score / 10);
   switch (colorIndex) {
     case 0:
-      return "#344ceb";
+      return "#66FF66"; // Screamin' Green
     case 1:
-      return "#349feb";
+      return "#A7F432"; //Green Lizard
     case 2:
-      return "#34e8eb";
+      return "#2243B6"; //Denim Blue
     case 3:
-      return "#34eba5";
+      return "#5DADEC"; //Blue Jeans	
     case 4:
-      return "#34eb56";
+      return "#34eb56"; // TODO add appropriate colors
     case 5:
       return "#6eeb34";
     case 6:
@@ -510,6 +522,7 @@ function updateTypeCount(event: TextDocumentChangeEvent) {
   }
 }
 
+//TODO FIX bug where initially score increases by a much higher number
 async function getCodeScore(repo: IRepository) {
   const startTime = (new Date().getTime()); // MS Epoch to Seconds
   let newScore = 0;
@@ -522,6 +535,7 @@ async function getCodeScore(repo: IRepository) {
     const reg: RegExp = new RegExp(/@@(.*?)@@/);
     const reg2: RegExp = new RegExp(/@@ \-(.*?),(.*?) \+(.*?),(.*?) @@/);
     const diff = diffStr.split("\n");
+    console.log(diffStr);
     for (let i = 0; i < diff.length; i++) {
       const curr = diff[i];
       const matched = reg.exec(curr);
