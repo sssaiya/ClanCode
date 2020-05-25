@@ -20,11 +20,15 @@
         "title": "Code with your Clan"
       },
       {
-        "command": "ClanCode.status",
-        "title": "status",
+        "command": "ClanCode.clanPage",
+        "title": "Clan Page"
+      },
+      {
+        "command": "ClanCode.refresh",
+        "title": "Refresh",
         "icon": {
-          "light": "images/test.svg",
-          "dark": "images/test.svg"
+          "light": "images/refresh.svg",
+          "dark": "images/refresh.svg"
         }
       }
     ],
@@ -44,10 +48,15 @@
     ]
   },
   "menus": {
-    "view/item/context": [
+    "view/title": [
       {
-        "command": "ClanCode.status",
-        "when": "view == myTreeDataProvider && viewItem == myItem",
+        "command": "ClanCode.refresh",
+        "when": "view == clanCode",
+        "group": "navigation"
+      },
+      {
+        "command": "ClanCode.clanPage",
+        "when": "view = myTreeDataProvider",
         "group": "inline"
       }
     ]
@@ -76,6 +85,7 @@
   "dependencies": {
     "clipboardy": "^2.3.0",
     "firebase": "^7.14.3",
+    "opn": "^6.0.0",
     "vsls": "^1.0.1830"
   }
 }

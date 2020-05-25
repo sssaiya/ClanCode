@@ -10,8 +10,6 @@ import {
   TextDocumentChangeEvent,
   SourceControlResourceState,
   SourceControlResourceGroup,
-  languages,
-  Hover,
 } from "vscode";
 import * as vscode from "vscode";
 import { myTreeDataProvider } from "./treeDataProvider";
@@ -20,6 +18,7 @@ import * as firebase from "firebase";
 import { registerFunction } from "./register";
 import { loginFunction } from "./login";
 import { createClan, joinClan } from "./clanFunctions";
+import { openDefault } from "./openInBrowser";
 
 let openRepo: IRepository;
 
@@ -92,11 +91,15 @@ export async function activate(context: ExtensionContext) {
   barItem1.color = "#00AA00";
   let barItem2 = window.createStatusBarItem(StatusBarAlignment.Left, alignment - 0.1);
   barItem2.color = "#00AA00";
+  if(!gitExtension){
+    setImmediate(activate,500); // try again in 5 ms
+    return;
+  }
 
   if (gitExtension) {
     const extension = await gitExtension.activate();
     const startTime = Math.round(new Date().getTime() / 1000); // MS Epoch to Seconds
-    window.showInformationMessage("CodeBar Exxtension Activated");
+    window.showInformationMessage("CodeBar Extension Activated");
     const gitModel = extension.model || extension._model;
     if (!gitModel.openRepositories[0]) return;
     openRepo = gitModel.openRepositories[0].repository;
@@ -157,7 +160,7 @@ export async function activate(context: ExtensionContext) {
         treeView.title = user.clanName || undefined;
         // treeView.message = user.clanTag || undefined;
 
-        commands.registerCommand("ClanCode.refresh", () =>
+        let refresh = commands.registerCommand("ClanCode.refresh", () =>
           treeDataProvider.refresh()
         );
       }
@@ -333,6 +336,11 @@ export async function activate(context: ExtensionContext) {
 
   let joinClanMenu = commands.registerCommand("ClanCode.joinClan", joinClan);
 
+  // let clanPageFunction = function () { window.showInformationMessage("HERE !!")};
+  let clanPage = vscode.commands.registerCommand('ClanCode.clanPage', (path) => {
+    openDefault(path); // finds Default browser and everything !! :D
+});
+
   // Make one command opening this menu to execute the other commands :)
   let CodeGameMenu = commands.registerCommand(
     "ClanCode.CodeGame",
@@ -439,7 +447,8 @@ export async function activate(context: ExtensionContext) {
     register,
     CodeGameMenu,
     createClanMenu,
-    joinClanMenu
+    joinClanMenu,
+    clanPage
   );
 }
 
@@ -474,7 +483,7 @@ export function getThermometer(score: number) {
 }
 
 export function getColorFromScore(score: number) {
-  window.showInformationMessage("Score - "+score);
+  // window.showInformationMessage("Score - "+score);
   const colorIndex = Math.floor(score / 10);
   switch (colorIndex) {
     case 0:
@@ -535,7 +544,6 @@ async function getCodeScore(repo: IRepository) {
     const reg: RegExp = new RegExp(/@@(.*?)@@/);
     const reg2: RegExp = new RegExp(/@@ \-(.*?),(.*?) \+(.*?),(.*?) @@/);
     const diff = diffStr.split("\n");
-    console.log(diffStr);
     for (let i = 0; i < diff.length; i++) {
       const curr = diff[i];
       const matched = reg.exec(curr);
