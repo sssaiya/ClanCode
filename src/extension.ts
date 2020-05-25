@@ -91,8 +91,8 @@ export async function activate(context: ExtensionContext) {
   barItem1.color = "#00AA00";
   let barItem2 = window.createStatusBarItem(StatusBarAlignment.Left, alignment - 0.1);
   barItem2.color = "#00AA00";
-  if(!gitExtension){
-    setImmediate(activate,500); // try again in 5 ms
+  if (!gitExtension) {
+    setImmediate(activate, 500); // try again in 5 ms
     return;
   }
 
@@ -336,10 +336,9 @@ export async function activate(context: ExtensionContext) {
 
   let joinClanMenu = commands.registerCommand("ClanCode.joinClan", joinClan);
 
+
   // let clanPageFunction = function () { window.showInformationMessage("HERE !!")};
-  let clanPage = vscode.commands.registerCommand('ClanCode.clanPage', (path) => {
-    openDefault(path); // finds Default browser and everything !! :D
-});
+  let clanPage = vscode.commands.registerCommand('ClanCode.clanPage', openPage);
 
   // Make one command opening this menu to execute the other commands :)
   let CodeGameMenu = commands.registerCommand(
@@ -354,6 +353,9 @@ export async function activate(context: ExtensionContext) {
         if (!user.isInClan) {
           options.push("Create Clan");
           options.push("Join Clan");
+        }
+        else{
+          options.push("Clan Page")
         }
       }
 
@@ -386,6 +388,9 @@ export async function activate(context: ExtensionContext) {
       }
       if (result == "Register") {
         commands.executeCommand("ClanCode.Register");
+      }
+      if (result == "Clan Page") {
+        commands.executeCommand("ClanCode.clanPage");
       }
     }
   );
@@ -581,6 +586,12 @@ async function getCodeScore(repo: IRepository) {
   const endTime = (new Date().getTime()); // MS Epoch to Seconds
   console.log("Update Codebar took " + (endTime - startTime) + "ms to run");
   return newScore;
+}
+
+function openPage() {
+  console.log(user);
+  const clanTag = user.clanTag
+  openDefault(clanTag); // finds Default browser and everything !! :D
 }
 // this method is called when your extension is deactivated
 export function deactivate() { }

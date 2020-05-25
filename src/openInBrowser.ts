@@ -1,17 +1,17 @@
 import { open, defaultBrowser, standardizedBrowserName } from './util';
-
 /** 
  * open default browser
  * if you have specified browser in configuration file, 
  * the browser you specified will work.
  * else the system default browser will work.
  */
-export const openDefault = (path: any): void => {
+export const openDefault = (clanTag: any): void => {
   let uri;
-  if (path) {
-    uri = path.fsPath;
+  console.log("clanTag - "+clanTag);
+  if (clanTag) {
+    uri = "https://us-central1-teamcode-dff02.cloudfunctions.net/getClan?clanTag="+clanTag;
   } else {
-    const _path = "https://www.google.com";
+    const _path = "https://us-central1-teamcode-dff02.cloudfunctions.net/getClan";
     // uri = _path && _path.fsPath;
     uri = _path
   }
