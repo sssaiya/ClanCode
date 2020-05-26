@@ -9,9 +9,9 @@ export const openDefault = (clanTag: any): void => {
   let uri;
   console.log("clanTag - "+clanTag);
   if (clanTag) {
-    uri = "https://us-central1-teamcode-dff02.cloudfunctions.net/getClan?clanTag="+clanTag;
+    uri = "https://teamcode-dff02.web.app/?clanTag="+clanTag;
   } else {
-    const _path = "https://us-central1-teamcode-dff02.cloudfunctions.net/getClan";
+    const _path = "https://us-central1-teamcode-dff02.cloudfunctions.net/";
     // uri = _path && _path.fsPath;
     uri = _path
   }
